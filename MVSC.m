@@ -1,4 +1,4 @@
-function [Y, C, obj_value, SltPnt] = MVSC(data, nbclusters, nbSltPnt, k, gamma...
+function [Y, C, obj_value, n, SltPnt] = MVSC(data, nbclusters, nbSltPnt, k, gamma...
 , method, param)
 %%
 % Li, Y., Nie, F., Huang, H., & Huang, J. (2015, January). 
@@ -7,7 +7,7 @@ function [Y, C, obj_value, SltPnt] = MVSC(data, nbclusters, nbSltPnt, k, gamma..
 % by Lance Liu 20/05/16
 
 %input
-% data: for k views of features, k row cells with R^{d \times n} in each
+% data: for v views of features, v row cells with R^{d \times n} in each
 % cell
 % nbclusters: number of clusters
 % nbSltPnt: number of salient points
@@ -28,8 +28,9 @@ V = numel(data);
 
 [X, n, nfeat] = DataConcatenate(data);
 
-[SltPnt, SltPntInd] = chooseSltPnt(X', nbSltPnt);
-RestPntInd = setdiff([1:n],SltPntInd);
+[~, SltPnt] = kmeans(X', nbSltPnt);
+%[SltPnt, SltPntInd] = chooseSltPnt(X', nbSltPnt);
+%RestPntInd = setdiff([1:n],SltPntInd);
 
 
 a = repmat(1/nbclusters, [1,V]);
@@ -38,15 +39,15 @@ a = repmat(1/nbclusters, [1,V]);
 
 for v = 1:V
     
-    RestPnt = data{v}(:,RestPntInd)';
-    PairDist = pdist2(RestPnt,SltPnt(:,dim_V_ind1(v): dim_V_ind2(v)));
+    DataPnt = data{v}';
+    PairDist = pdist2(DataPnt,SltPnt(:,dim_V_ind1(v): dim_V_ind2(v)));
     [score, ind] = sort(PairDist,2);
     ind = ind(:,1:k);   
     
 %*****
 %make a Indicator Mask to record j \in \theta_i
-    IndMask = zeros(n - nbSltPnt, nbSltPnt);
-    for i = 1:n - nbSltPnt
+    IndMask = zeros(n, nbSltPnt);
+    for i = 1:n
          IndMask(i, ind(i,:)) = 1;
     end
     
@@ -60,17 +61,17 @@ for v = 1:V
     Dr{v} = diag(sum(Z{v},2));
     D{v} = blkdiag(Dr{v},Dc{v});
     
-    tmp1 = zeros(n);
-    tmp1(1:n-nbSltPnt,n-nbSltPnt+1:end) = Z{v};
-    tmp1(n-nbSltPnt+1:end,1:n-nbSltPnt) = Z{v}';
+    tmp1 = zeros(n+nbSltPnt);
+    tmp1(1:n,n+1:end) = Z{v};
+    tmp1(n+1:end,1:n) = Z{v}';
     W{v} = tmp1;
     
-    L{v} = eye(n) - (D{v}^-0.5) * W{v} * (D{v}^-0.5);
+    L{v} = eye(n + nbSltPnt) - (D{v}^-0.5) * W{v} * (D{v}^-0.5);
 end
 
 for t = 1:niters
-    L_sum = zeros(n, n);
-    Z_hat = zeros(n - nbSltPnt, nbSltPnt);
+    L_sum = zeros(n + nbSltPnt, n + nbSltPnt);
+    Z_hat = zeros(n, nbSltPnt);
     
     for v = 1:V
         Z_hat = Z_hat + a(v)^gamma*Z{v}*(Dc{v})^(-0.5);
